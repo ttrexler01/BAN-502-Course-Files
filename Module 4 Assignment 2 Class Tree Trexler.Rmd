@@ -1,0 +1,162 @@
+---
+title: "Module 4 Assignment 2 ClassTree"
+output: word_document
+---
+
+
+```{r}
+options(tidyverse.quiet=FALSE)
+library(tidyverse)
+library(caret)
+library(rpart)
+library(rattle)
+library(RColorBrewer)
+library(e1071)
+```
+
+# Reading in Parole data frame
+```{r}
+parole <- read_csv("E:/Trexler/MSBA/Course Work/BAN 502/Module 4/Assign 2/parole.csv")
+str(parole)
+```
+# Mutating parole data set (trying different way from previous assignment)
+```{r}
+parole = parole %>%
+  mutate(male = as.factor(male)) %>%
+  mutate(male = fct_recode(male, "Female" = "0", "Male" = "1")) %>%
+  mutate(race = as.factor(race)) %>%
+  mutate(race = fct_recode(race, "White"="1", "Other"="2")) %>%
+  mutate(state = as.factor(state)) %>%
+  mutate(state = fct_recode(state, "Other"="1","KY"="2","LA"="3","VA"="4")) %>%
+  mutate(crime = as.factor(crime)) %>%
+  mutate(crime = fct_recode(crime, "Other"="1","Larceny"="2","Drug"="3","Driving"="4")) %>%
+  mutate(multiple.offenses = as.factor(multiple.offenses)) %>%
+  mutate(multiple.offenses = fct_recode(multiple.offenses, "Yes"="1","No"="0")) %>%
+  mutate(violator = as.factor(violator)) %>%
+  mutate(violator = fct_recode(violator, "Yes"="1","No"="0"))
+
+str(parole)
+```
+
+# Task 1: Spliting data into training and test set (70-30) with random set.seed 12345
+```{r}
+set.seed(12345)
+train.rows = createDataPartition(y = parole$violator, p=0.7, list = FALSE)
+train = slice(parole, train.rows)
+test = slice(parole, -train.rows)
+
+```
+
+# Task 2: Creating a Classification Tree to predict "violator"
+```{r}
+tree = rpart(violator ~., train, method = "class")
+fancyRpartPlot(tree)
+
+```
+
+# Task 3: Classifying 40 year-old parolee from Louisiana who served a 5 year prison sentence.
+With the information provided it could be Yes or no due to not knowing the race. Where it splits for the state at the top of the classification tree, it begins with race. If we assume that the race of the parolee is other, then we follow the time served for greater than 3.9 years, then parolle is greater than 30 so we end up at yes they will violate parole (leaf 29). If we have a white parolee at 40 years old, then we end up at no they will not violate parole (leaf 15).
+
+# Task 4:Using printcp function to evaluate tree performance as a function of the complexity parameter
+```{r}
+plotcp(tree)
+printcp(tree)
+
+```
+###plotcp is not very accurate when compared to printcp
+Optimal CP value is 0.030303, which means this would be a tree with no splits.We would want to maximize a tree at .0136, which gives us 4 splits and is right under the cross validation error line.
+
+# Task 5:Pruning tree data frame to give us a root tree
+```{r}
+tree_1 = prune(tree, cp= tree$cptable[which.min(tree$cptable[,"xerror"]),"CP"])
+table(train$violator)
+```
+No has the most observations
+
+
+# Task 6: Using unpruned tree to develope predictions from training data set
+```{r}
+treepred = predict(tree, train, type = "class")
+confusionMatrix(treepred, train$violator, positive = "Yes")
+
+```
+Accuracy: .9027
+Sensitivity: .49091
+Specificity: .95694
+
+# Task 7: Using unpruned tree to run predictions on testing data
+```{r}
+treepred_test = predict(tree, test, type = "class")
+confusionMatrix(treepred_test, test$violator, positive = "Yes")
+
+```
+Accuracy: .896
+Sensitivity: .43478
+Specificity: .95531
+
+This prediction model is losing accuracy going from a .90 to a .89.I feel like with the split and data, you would like to think that it would be a little closer, but then again there are only a total of 675 observation in the total data frame as a whole.
+
+# Task 8: reading in Blood.csv and mutating data frame as_factor's where needed
+```{r}
+blood <- read_csv("E:/Trexler/MSBA/Course Work/BAN 502/Module 4/Assign 2/Blood.csv")
+str(blood)
+```
+
+```{r}
+blood = blood %>% 
+  mutate(DonatedMarch = as_factor(as.character(DonatedMarch))) %>%
+  mutate(DonatedMarch = fct_recode(DonatedMarch, "yes" = "1", "No"= "0"))
+str(blood)
+
+```
+
+# Task 9: Splitting data into train2 and test2 at a 70-30 split
+```{r}
+set.seed(1234)
+train.rows = createDataPartition(y = blood$DonatedMarch, p=0.7, list = FALSE)
+train2 = slice(blood, train.rows)
+test2 = slice(blood, -train.rows)
+
+```
+#Classification Tree for Blood data on train2 set
+```{r}
+treeblood = rpart(DonatedMarch ~., train2, method = "class")
+fancyRpartPlot(treeblood)
+
+```
+```{r}
+plotcp(treeblood)
+printcp(treeblood)
+
+```
+Optimal CP value is 0.016. Anything more and it would be to overfitting.
+
+# Task 10: Pruning the tree to optimal cp value tree_3
+```{r}
+treeblood1 = prune(treeblood,cp= treeblood$cptable[which.min(treeblood$cptable[,"xerror"]),"CP"])
+
+treeblood_train = predict(treeblood1, train2, type = "class")
+confusionMatrix(treeblood_train, train2$DonatedMarch, positive = "yes")
+```
+Accuracy: .813
+Sensitivity: .4240
+Specificity: .9348
+
+
+```{r}
+treeblood_test = predict(treeblood1, test2, type = "class")
+confusionMatrix(treeblood_test, test2$DonatedMarch, positive = "yes")
+
+```
+Accuracy: .7545
+Sensitivity: .33962
+Specificity: .88304
+
+### As we can see going to training set to testing set, the predictions accuracy decreases from .813 to .7545. This level of accuracy is probably okay, but there may be some more investigating needed to see where we can get a higher level of accuracy.
+
+
+
+
+
+
+
